@@ -3,7 +3,7 @@ from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
 
-client = OpenAI(api_key="sk-...")  # <--- paste your key here
+client = OpenAI(api_key=api_key)  # <--- paste your key here
 NOTION_URL = "https://thevcfellowship.notion.site/Founder-Fit-and-Outreach-d044466772c340e7b9bced2c2042089d"
 
 def fetch_notion_content(url):
