@@ -3,11 +3,7 @@ from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
 
-api_key = st.secrets.get("api_key", None)
-if not api_key:
-    st.error("OpenAI API key missing! Please add it to your Streamlit secrets.")
-    st.stop()
-
+api_key = st.secrets["api_key"]
 client = OpenAI(api_key=api_key)
 st.set_page_config(page_title="shivNew-Style VC Bot", page_icon="🤖")
 
