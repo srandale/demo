@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 
 # For voice
 import streamlit_webrtc as webrtc
-import speech_recognition as sr
+import SpeechRecognition as sr
 
 # For TTS (server-side; see browser-only alternative in comments)
 import pyttsx3
