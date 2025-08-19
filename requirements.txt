@@ -4,4 +4,4 @@ beautifulsoup4
 requests
 pyttsx3 
 streamlit_webrtc
-speech_recognition
+SpeechRecognition
