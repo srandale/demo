@@ -28,7 +28,7 @@ Question: {question}
     )
     return response.choices[0].text.strip()
 
-st.title("VC Bot (Demo)")
+st.title("Shiv's VC Bot (Demo)")
 st.write("Ask any VC/startup question—answers are based on this Notion doc.")
 
 if "history" not in st.session_state:
