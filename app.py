@@ -1,14 +1,16 @@
 import streamlit as st
 from openai import OpenAI
 import requests
+import os
+import json
 from bs4 import BeautifulSoup
-from youtube_transcript_api import YouTubeTranscriptApi
-import re
 
+# ------------ SETTINGS --------------
 api_key = st.secrets["api_key"]
 client = OpenAI(api_key=api_key)
-
 NOTION_URL = "https://thevcfellowship.notion.site/Founder-Fit-and-Outreach-d044466772c340e7b9bced2c2042089d"
+transcript_dir = 'transcripts'  # folder with YouTube transcripts (see bulk fetch code)
+# -------------------------------------
 
 def fetch_notion_content(url):
     try:
@@ -16,128 +18,66 @@ def fetch_notion_content(url):
         soup = BeautifulSoup(res.text, "html.parser")
         return soup.get_text(separator='\n')[:6000]
     except Exception as e:
-        return f"Error: {e}"
+        return f"Could not fetch Notion context: {e}"
 
-def ask_vc_bot(question, url=NOTION_URL):
-    doc = fetch_notion_content(url)
+def load_all_transcripts():
+    data = []
+    for fname in os.listdir(transcript_dir):
+        if fname.endswith('.json'):
+            with open(os.path.join(transcript_dir, fname), encoding='utf-8') as f:
+                transcript = json.load(f)
+                transcript_text = "\n".join([entry['text'] for entry in transcript])
+                data.append({'video_id': fname[:-5], 'text': transcript_text})
+    return data
+
+def ask_unified_bot(question, notion_url, all_transcripts):
+    notion_context = fetch_notion_content(notion_url)
+    if not notion_context or "Could not fetch" in notion_context:
+        notion_context = ""  # fail gracefully
+
+    # (Optionally: limit number of transcript chars if your set is large)
+    transcript_context = ""
+    for t in all_transcripts:
+        transcript_context += f"--- VIDEO {t['video_id']} ---\n{t['text']}\n"
+    transcript_context = transcript_context[:12000]  # cap context for efficiency
+
     prompt = f"""
-You are a VC-focused AI. ONLY answer using the following context:
-{doc}
-Question: {question}
+Answer the user's VC/startup questions using ONLY the following knowledge sources:
+
+[From Notion doc:]
+{notion_context}
+
+[From YouTube video transcripts:]
+{transcript_context}
+
+User question: {question}
 """
     response = client.completions.create(
-        model="gpt-4o-mini", prompt=prompt, max_tokens=350, temperature=0.4
+        model="gpt-4o-mini",
+        prompt=prompt,
+        max_tokens=400,
+        temperature=0.3,
     )
     return response.choices[0].text.strip()
 
-def get_youtube_video_id(url):
-    regex = r"(?:v=|\/)([0-9A-Za-z_-]{11})"
-    match = re.search(regex, url)
-    if match:
-        return match.group(1)
-    else:
-        return None
-
-# ---- UI ----
-st.title("Shiv's VC Bot (Demo)")
-st.write("Ask any VC/startup question—answers are based on this Notion doc.")
+# ---- Streamlit UI ----
+st.title("VC Knowledge Bot (Notion + YouTube Bulk)")
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
-st.markdown("""
-<script>
-let recognition;
-let recognizing = false;
-function startRecognition() {
- recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
- recognition.lang = 'en-US';
- recognizing = true;
- recognition.start();
- recognition.onresult = function(event) {
-   let res = '';
-   for(let i = event.resultIndex; i < event.results.length; ++i) {
-     res += event.results[i].transcript;
-   }
-   document.querySelector('input[data-testid="stTextInput"]').value = res;
-   let e = new Event('input', {bubbles:true});
-   document.querySelector('input[data-testid="stTextInput"]').dispatchEvent(e);
- };
- recognition.onend = function() {
-   recognizing = false;
-   document.getElementById('mic-btn').innerText = "🎤 Voice";
- };
-}
-function toggleMic() {
- if (!recognizing) {
-   startRecognition();
-   document.getElementById('mic-btn').innerText = "🛑 Stop";
- } else {
-   recognition.stop();
-   recognizing = false;
-   document.getElementById('mic-btn').innerText = "🎤 Voice";
- }
-}
-window.addEventListener('DOMContentLoaded', function() {
- setTimeout(()=>{
-   let input=document.querySelector('input[data-testid="stTextInput"]');
-   if (input && !document.getElementById('mic-btn')) {
-     let btn=document.createElement('button');
-     btn.id = 'mic-btn';
-     btn.innerText = "🎤 Voice";
-     btn.onclick = toggleMic;
-     btn.style.marginLeft = "5px";
-     input.parentElement.appendChild(btn);
-   }
- }, 1000);
-});
-</script>
-""", unsafe_allow_html=True)
+all_transcripts = load_all_transcripts()
 
-q = st.text_input("Your question:")
+q = st.text_input("Ask your VC/startup/video question:")
 ask = st.button("Ask")
 if ask and q:
-    ans = ask_vc_bot(q)
+    ans = ask_unified_bot(q, NOTION_URL, all_transcripts)
     st.session_state.history.append((q, ans))
-    st.markdown(f"""
- <script>
- window.speechSynthesis.speak(new SpeechSynthesisUtterance({repr(ans)}));
- </script>
- """, unsafe_allow_html=True)
 
 for _q, _a in reversed(st.session_state.history):
     st.markdown(f"**You:** {_q}")
-    st.markdown(f"**VC Bot:** {_a}")
+    st.markdown(f"**Bot:** {_a}")
 
-# --- YouTube Transcript Extraction Section ---
 st.markdown("---")
-st.header("Extract YouTube Video Transcript")
-
-# Pre-filled demo YouTube link (as requested)
-demo_youtube_url = "https://youtu.be/eHJnEHyyN1Y?si=vvi5K3S4fH9pHsdC"
-youtube_url = st.text_input("Enter YouTube video link:", value=demo_youtube_url)
-
-if youtube_url:
-    video_id = get_youtube_video_id(youtube_url)
-    if video_id:
-        try:
-            transcript_list = YouTubeTranscriptApi().list(video_id)
-            transcript = transcript_list.find_transcript(['en'])
-            transcript_data = transcript.fetch()
-            for entry in transcript_data:
-                # Fix: Support both dict and object from the API
-                if isinstance(entry, dict):
-                    start = entry.get('start')
-                    duration = entry.get('duration')
-                    text = entry.get('text')
-                else:
-                    # For FetchedTranscriptSnippet objects
-                    start = getattr(entry, 'start', None)
-                    duration = getattr(entry, 'duration', None)
-                    text = getattr(entry, 'text', None)
-                if start is not None and duration is not None and text is not None:
-                    st.markdown(f"**{start:.2f}s–{start+duration:.2f}s:** {text}")
-        except Exception as e:
-            st.error(f"Error fetching transcript: {str(e)}")
-    else:
-        st.error("Invalid YouTube URL")
+st.markdown(f"Transcripts loaded: {len(all_transcripts)}")
+st.markdown(f"Notion doc source: [link]({NOTION_URL})")
