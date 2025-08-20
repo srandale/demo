@@ -120,7 +120,7 @@ if youtube_url:
     video_id = get_youtube_video_id(youtube_url)
     if video_id:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
+            transcript_list = YouTubeTranscriptApi().list(video_id)
             transcript = transcript_list.find_transcript(['en'])
             transcript_data = transcript.fetch()
             for entry in transcript_data:
