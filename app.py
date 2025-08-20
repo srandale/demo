@@ -14,13 +14,32 @@ NOTION_URL = "https://thevcfellowship.notion.site/Founder-Fit-and-Outreach-d0444
 TRANSCRIPTS_DIR = 'transcripts'
 
 def channel_handle_to_id_url(handle_url):
-    resp = requests.get(handle_url)
-    match = re.search(r'"channelId":"(UC[-_A-Za-z0-9]+)"', resp.text)
-    if match:
-        channel_id = match.group(1)
-        return f"https://www.youtube.com/channel/{channel_id}"
-    else:
-        raise Exception("Channel ID not found for: " + handle_url)
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/119.0.0.0 Safari/537.36"
+        )
+    }
+    resp = requests.get(handle_url, headers=headers)
+    print(f"Status: {resp.status_code}")
+    # Uncomment to debug unexpected HTML with:
+    # with open("yt_debug.html", "w", encoding="utf-8") as f:
+    #     f.write(resp.text)
+
+    if resp.status_code != 200:
+        raise Exception("Failed to load handle URL.")
+    html = resp.text
+
+    match = re.search(r'"channelId":"(UC[0-9A-Za-z_-]+)"', html)
+    if not match:
+        match = re.search(r'"browseId":"(UC[0-9A-Za-z_-]+)"', html)
+    if not match:
+        match = re.search(r'<link rel="canonical" href="https://www\.youtube\.com/channel/(UC[0-9A-Za-z_-]+)"', html)
+    if not match:
+        raise Exception("Channel ID not found.\nPreview HTML:\n" + html[:500])
+    channel_id = match.group(1)
+    return f"https://www.youtube.com/channel/{channel_id}"
 
 def extract_video_id(url):
     patterns = [r'v=([^&?/]+)', r'youtu\.be/([^?&]+)', r'/([A-Za-z0-9_-]{11})(?:[/?&]|$)']
@@ -101,25 +120,27 @@ User question: {question}
     return response.choices[0].text.strip()
 
 # -------- Streamlit UI --------
-st.title("VC Knowledge Bot (Notion + YouTube Bulk Channel Q&A)")
+st.title("VC Knowledge Bot (Notion + Bulk YouTube Channel Q&A)")
 
 with st.expander("🔄 (Optional) Load YouTube Channel Transcripts"):
-    channel_url = st.text_input("Enter YouTube Channel URL (@handle or /channel/UC...):", value="https://www.youtube.com/@StartupClubTV")
+    channel_url = st.text_input("Enter YouTube Channel URL (@handle or /channel/UC...):", value="https://www.youtube.com/@bridger_pennington")
     fetch_btn = st.button("Fetch/Update Channel Transcripts")
     if fetch_btn and channel_url:
         with st.spinner("Fetching transcripts..."):
-            ok, fail = fetch_channel_transcripts(channel_url)
-        st.success(f"New transcripts downloaded: {ok}. Videos with errors: {fail}.")
+            try:
+                ok, fail = fetch_channel_transcripts(channel_url)
+                st.success(f"New transcripts downloaded: {ok}. Videos with errors: {fail}.")
+            except Exception as e:
+                st.error(f"Error: {e}")
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Always reload transcripts after (potential) update
 if not os.path.exists(TRANSCRIPTS_DIR):
     os.makedirs(TRANSCRIPTS_DIR)
 all_transcripts = load_all_transcripts()
 
-q = st.text_input("Ask your VC/startup/video question, using Notion doc or local YouTube transcripts:")
+q = st.text_input("Ask your VC/startup/video question (answers use Notion doc, & downloaded YouTube transcripts):")
 ask = st.button("Ask the bot")
 if ask and q:
     ans = ask_unified_bot(q, NOTION_URL, all_transcripts)
