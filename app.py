@@ -30,7 +30,7 @@ Question: {question}
     return response.choices[0].text.strip()
 
 def get_youtube_video_id(url):
-    regex = r"(?:v=|\/)([0-9A-Za-z_-]{11}).*"
+    regex = r"(?:v=|\/)([0-9A-Za-z_-]{11})"
     match = re.search(regex, url)
     if match:
         return match.group(1)
@@ -42,11 +42,9 @@ def get_youtube_video_id(url):
 st.title("Shiv's VC Bot (Demo)")
 st.write("Ask any VC/startup question—answers are based on this Notion doc.")
 
-# Session history
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# --- Voice Input (Browser JS) ---
 st.markdown("""
 <script>
 let recognition;
@@ -96,7 +94,6 @@ window.addEventListener('DOMContentLoaded', function() {
 </script>
 """, unsafe_allow_html=True)
 
-# --- VC Bot Section ---
 q = st.text_input("Your question:")
 ask = st.button("Ask")
 if ask and q:
@@ -114,7 +111,11 @@ for _q, _a in reversed(st.session_state.history):
 # --- YouTube Transcript Extraction Section ---
 st.markdown("---")
 st.header("Extract YouTube Video Transcript")
-youtube_url = st.text_input("Enter YouTube video link:")
+
+# Pre-filled demo YouTube link (as requested)
+demo_youtube_url = "https://youtu.be/eHJnEHyyN1Y?si=vvi5K3S4fH9pHsdC"
+youtube_url = st.text_input("Enter YouTube video link:", value=demo_youtube_url)
+
 if youtube_url:
     video_id = get_youtube_video_id(youtube_url)
     if video_id:
