@@ -4,3 +4,4 @@ beautifulsoup4
 requests
 pyttsx3 
 streamlit_webrtc
+youtube-transcript-api
